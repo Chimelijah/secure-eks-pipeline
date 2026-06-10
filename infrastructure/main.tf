@@ -1,0 +1,96 @@
+terraform {
+  required_version = ">= 1.5.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      # Use AWS provider v6+ to match other modules' requirements
+      version = ">= 6.28.0"
+    }
+  }
+}
+
+
+# SECURE: Create a strict, least-privilege policy
+provider "aws" {
+  region = "us-east-1"
+}
+
+# Vulnerable IAM Role for EKS Nodes
+resource "aws_iam_role" "insecure_node_role" {
+  name = "insecure-eks-node-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
+  })
+}
+
+# The Anti-Pattern: Giving the whole node full S3 access
+resource "aws_iam_role_policy_attachment" "s3_full_access" {
+  role       = aws_iam_role.insecure_node_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+}
+
+# EKS Cluster (Kept at v19 natively matching your workspace cache)
+module "eks" {
+  source          = "terraform-aws-modules/eks/aws"
+  # Let Terraform choose a compatible eks module version
+  # version         = "19.21.0"
+  name               = "devsecops-lab-cluster"
+  kubernetes_version = "1.30"
+  
+  vpc_id          = "vpc-00c282900994e135c"                # Replace with your Default VPC ID
+  subnet_ids = ["subnet-0a6251e20c03bd53c", "subnet-0c7571dc4066bdb64"] # Correct: This is a list of strings
+ 
+ # --- ADD THESE TWO LINES TO ENABLE PUBLIC ENDPOINT ACCESS ---
+  endpoint_public_access  = true
+  endpoint_private_access = true
+  # -----------------------------------------------------------
+
+  eks_managed_node_groups = {
+    vulnerable_nodes = {
+      min_size     = 1
+      max_size     = 2
+      desired_size = 1
+      iam_role_arn = aws_iam_role.insecure_node_role.arn
+
+      # ADD THIS BLOCK: Enforce IMDSv2 and block pod access
+      metadata_options = {
+        http_endpoint               = "enabled"
+        http_tokens                 = "required" # This forces IMDSv2
+        http_put_response_hop_limit = 1          # Prevents pods from reading it
+    }
+    }
+  }
+}
+
+# SECURE: Create a strict, least-privilege policy
+resource "aws_iam_policy" "app_s3_policy" {
+  name        = "StrictAppS3Policy"
+  description = "Allows reading only from the specific app bucket"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["s3:GetObject"]
+      Resource = ["arn:aws:s3:::my-specific-app-bucket/*"] # Restricted to ONE bucket
+    }]
+  })
+}
+# SECURE: Map the IAM Role to the Kubernetes Service Account via OIDC
+module "iam_eks_role" {
+  source    = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"
+  name = "SecureAppRole"
+  policies = {
+    policy = aws_iam_policy.app_s3_policy.arn
+  }
+  oidc_providers = {
+    main = {
+      provider_arn               = module.eks.oidc_provider_arn
+      namespace_service_accounts = ["default:secure-app-sa"]
+    }
+  }
+}

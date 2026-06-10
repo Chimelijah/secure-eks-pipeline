@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: insecure-app-deployment
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: insecure-app
+  template:
+    metadata:
+      labels:
+        app: insecure-app
+    spec:
+      containers:
+      - name: web-app
+        # ENTER YOUR EXACT COPIED STRING HERE WITHOUT ALTERATIONS:
+        image: 062125468484.dkr.ecr.us-east-1.amazonaws.com/insecure-app:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
