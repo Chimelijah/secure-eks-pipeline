@@ -2,35 +2,50 @@ name: DevSecOps Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
 jobs:
   security-scanning:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read        # Required for checkout
+      security-events: write # Required for SARIF upload
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       # GATE 1: Secret Scanning
       - name: TruffleHog Secret Scan
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug --only-verified
+
       # GATE 2: Scan Terraform for misconfigurations before deployment
-      - name: tfsec
-        uses: aquasecurity/tfsec-action@v1.0.0
+      - name: Checkov IaC Scan
+        uses: bridgecrewio/checkov-action@master
         with:
-          working_directory: ./infrastructure
-          # ADDED BELOW TO PREVENT MISCONFIGURATIONS FROM BLOCKING LAB DEPLOYMENTS
-          soft_fail: true
-      # GATE 3: Scan the Docker image for Vulnerabilities
+          directory: ./infrastructure
+          framework: terraform
+          output_format: cli
+          soft_fail: false
+          # Fails the build on CRITICAL/HIGH misconfigurations
+
+      # GATE 3: Build the Docker image
       - name: Build Image
         run: docker build -t my-app:latest ./src
-      
+
+      # GATE 4: Scan the Docker image for Vulnerabilities
       - name: Trivy Vulnerability Scanner
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'my-app:latest'
           format: 'table'
-          exit-code: '0' # CHANGE FROM '1' TO '0' TO LET LAB PIPELINE COMPLETION PASS
+          exit-code: '1'          # Fails the build on HIGH/CRITICAL CVEs
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
-          
+          vuln-type: 'os,library'
