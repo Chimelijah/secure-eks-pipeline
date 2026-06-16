@@ -16,7 +16,7 @@ spec:
       containers:
       - name: web-app
         # ENTER YOUR EXACT COPIED STRING HERE WITHOUT ALTERATIONS:
-        image: 062125468484.dkr.ecr.us-east-1.amazonaws.com/secure-app:latest
+        image: <YOUR_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/secure-app:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080

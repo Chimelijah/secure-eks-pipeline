@@ -15,3 +15,4 @@ def read_s3():
 if __name__ == '__main__':
     # ANTI-PATTERN: Running as root on all interfaces
     app.run(host='0.0.0.0', port=8080)
+    

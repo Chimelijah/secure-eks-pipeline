@@ -39,8 +39,8 @@ module "eks" {
   cluster_name    = "devsecops-lab-cluster"
   cluster_version = "1.30"
   
-  vpc_id          = "vpc-00c282900994e135c"                # Replace with your Default VPC ID
-  subnet_ids      = ["subnet-0a6251e20c03bd53c", "subnet-0c7571dc4066bdb64"]  # Replace with your subnets
+  vpc_id          = "vpc- id"                # Replace with your Default VPC ID
+  subnet_ids      = ["subnet-1", "subnet-2"]  # Replace with your subnets
 
   
 # --- ADD THESE TWO LINES TO ENABLE PUBLIC ENDPOINT ACCESS ---
@@ -54,10 +54,15 @@ eks_managed_node_groups = {
       max_size     = 2
       desired_size = 1
       iam_role_arn = aws_iam_role.insecure_node_role.arn
+      # ADD THIS BLOCK: Enforce IMDSv2 and block pod access
+      metadata_options = {
+        http_endpoint               = "enabled"
+        http_tokens                 = "required" # This forces IMDSv2
+        http_put_response_hop_limit = 1          # Prevents pods from reading it
     }
   }
 }
-
+}
 resource "aws_iam_policy" "app_s3_policy" {
   name        = "StrictAppS3Policy"
   description = "Allows reading only from the specific app bucket"
